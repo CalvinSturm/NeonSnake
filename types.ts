@@ -6,6 +6,16 @@ export enum Direction {
   RIGHT = 'RIGHT'
 }
 
+// Physics Configuration
+export interface PhysicsProfile {
+  usesVerticalPhysics: boolean;
+  mass?: number;
+  friction?: number;
+}
+
+// Boss State
+export type BossState = 'ENTERING' | 'IDLE' | 'ATTACK' | 'STUNNED' | 'DYING';
+
 export enum GameStatus {
   IDLE = 'IDLE',
   PLAYING = 'PLAYING',
@@ -100,9 +110,9 @@ export interface WeaponStats {
 }
 
 export interface Trait {
-    name: string;
-    type: string;
-    description: string;
+  name: string;
+  type: string;
+  description: string;
 }
 
 export interface CharacterProfile {
@@ -112,8 +122,8 @@ export interface CharacterProfile {
   description: string;
   color: string;
   initialStats: {
-      weapon: WeaponStats;
-      shieldActive?: boolean;
+    weapon: WeaponStats;
+    shieldActive?: boolean;
   };
   traits: Trait[];
 }
@@ -160,15 +170,14 @@ export interface Enemy {
   vy: number;
   speed: number;
   angle?: number;
-  flash: number;
   hitCooldowns?: Record<string, number>;
   stunTimer?: number;
   isGrounded: boolean;
-  physicsProfile: any;
+  physicsProfile: PhysicsProfile;
   jumpCooldownTimer: number;
   jumpIntent: boolean;
   shouldRemove?: boolean;
-  
+
   // AI
   aiState?: string;
   intent?: EnemyIntent; // Updated
@@ -183,13 +192,13 @@ export interface Enemy {
   bossPhase?: number;
   dashState?: string;
   bossConfigId?: string;
-  bossState?: any;
+  bossState?: BossState;
   facing?: number;
   summons?: number;
 }
 
 export interface BossEnemy extends Enemy {
-    // Specific boss fields if needed
+  // Specific boss fields if needed
 }
 
 export interface FoodItem extends Point {
@@ -213,7 +222,7 @@ export interface Projectile {
   type: string;
   owner: 'PLAYER' | 'ENEMY';
   shouldRemove?: boolean;
-  
+
   // Specifics
   piercing?: boolean;
   hitIds?: string[];
@@ -255,6 +264,7 @@ export interface Particle {
   color: string;
   life: number;
   shouldRemove?: boolean;
+  active: boolean; // Added for ObjectPool
 }
 
 export interface FloatingText {
@@ -309,11 +319,11 @@ export interface DigitalRainDrop {
 export type AudioEvent = 'MOVE' | 'EAT' | 'XP_COLLECT' | 'SHOOT' | 'EMP' | 'HIT' | 'GAME_OVER' | 'LEVEL_UP' | 'BONUS' | 'POWER_UP' | 'SHIELD_HIT' | 'ENEMY_DESTROY' | 'COSMETIC_UNLOCK' | 'HACK_LOST' | 'HACK_COMPLETE' | 'ENEMY_SPAWN' | 'COMPRESS' | 'ARCHIVE_LOCK' | 'CLI_POWER' | 'CLI_BURST' | 'GLITCH_TEAR' | 'SYS_RECOVER' | 'UI_HARD_CLICK';
 
 export interface AudioPlayData {
-    level?: number;
-    multiplier?: number;
-    terminalType?: string;
-    difficulty?: Difficulty; // Added
-    combo?: number; // Added
+  level?: number;
+  multiplier?: number;
+  terminalType?: string;
+  difficulty?: Difficulty; // Added
+  combo?: number; // Added
 }
 
 export interface AudioRequest {
@@ -339,15 +349,15 @@ export type ModalState = 'NONE' | 'PAUSE' | 'SETTINGS';
 export type MobileControlScheme = 'JOYSTICK' | 'ARROWS' | 'SWIPE';
 
 export interface Hitbox {
-    id: string;
-    ownerId: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    damage: number;
-    color: string;
-    shouldRemove?: boolean; // Added
+  id: string;
+  ownerId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  damage: number;
+  color: string;
+  shouldRemove?: boolean; // Added
 }
 
 export interface DifficultyConfig {
@@ -369,8 +379,14 @@ export interface DifficultyConfig {
 }
 
 export interface StageTheme {
-    background: string;
-    grid: string;
-    wall: string;
-    obstacle?: string;
+  background: string;
+  grid: string;
+  wall: string;
+  obstacle?: string;
 }
+
+export type EnemyVisualMap = Map<string, {
+  flash: number;
+  x: number;
+  y: number;
+}>;

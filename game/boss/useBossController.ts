@@ -19,7 +19,7 @@ export function useBossController(
     game: ReturnType<typeof useGameState>,
     spawner: ReturnType<typeof useSpawner>
 ) {
-    const { hitboxesRef, gameTimeRef, powerUpsRef, audioEventsRef, viewport } = game;
+    const { hitboxesRef, gameTimeRef, powerUpsRef, audioEventsRef, viewport, projectilesRef } = game;
     const { spawnEnemy } = spawner;
 
     // ─── MOVEMENT ENGINE ───
@@ -157,11 +157,51 @@ export function useBossController(
                     }
                     break;
 
+                case 'SPAWN_PROJECTILE':
+                    const projCount = intent.count || 1;
+                    const projSpread = intent.spread || 0;
+                    const projBaseAngle = intent.angle;
+
+                    // Use proper grid size and velocity scaling (same as player projectiles)
+                    const gridSize = viewport.cols > 0 ? (1920 / viewport.cols) : 32; // Approximate grid size
+                    const velocityScale = gridSize / 20; // Match player projectile scaling
+
+                    for (let i = 0; i < projCount; i++) {
+                        // Calculate angle with spread for multiple projectiles
+                        let projAngle = projBaseAngle;
+                        if (projCount > 1) {
+                            const angleOffset = (i / (projCount - 1) - 0.5) * projSpread;
+                            projAngle = projBaseAngle + angleOffset;
+                        }
+
+                        // Convert grid position to pixel position
+                        const projX = bossX * gridSize + gridSize / 2;
+                        const projY = bossY * gridSize + gridSize / 2;
+
+                        // Scale velocity properly
+                        const projSpeed = intent.speed * velocityScale;
+
+                        projectilesRef.current.push({
+                            id: `boss_proj_${Date.now()}_${i}`,
+                            x: projX,
+                            y: projY,
+                            vx: Math.cos(projAngle) * projSpeed,
+                            vy: Math.sin(projAngle) * projSpeed,
+                            damage: intent.damage,
+                            color: '#ff4444',
+                            size: 10,
+                            type: 'BOSS_PROJECTILE',
+                            owner: 'ENEMY'
+                        });
+                    }
+                    audio.play('SHOOT');
+                    break;
+
                 case 'LOCK_CAMERA':
                     break;
             }
         }
-    }, [hitboxesRef, spawnEnemy, powerUpsRef, gameTimeRef, audioEventsRef]);
+    }, [hitboxesRef, spawnEnemy, powerUpsRef, gameTimeRef, audioEventsRef, projectilesRef, viewport]);
 
     // Exposed method for single entity update
     const updateBoss = useCallback((boss: Enemy, dt: number, playerHead: Point) => {

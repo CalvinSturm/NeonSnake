@@ -172,6 +172,8 @@ export const SnakeGame: React.FC = () => {
 
     // Cosmetic Unlock Check
     // We check on stage transitions AND game over to ensure players get instant feedback
+    // Note: Ref values are read inside the effect, not tracked as dependencies.
+    // The effect triggers on status change; refs provide current values at execution time.
     useEffect(() => {
         if (status === GameStatus.STAGE_TRANSITION || status === GameStatus.GAME_OVER) {
             const stats = {
@@ -182,14 +184,14 @@ export const SnakeGame: React.FC = () => {
                 terminalsHacked: game.terminalsHackedRef.current,
                 bossDefeated: game.bossDefeatedRef.current,
                 integrity: game.tailIntegrityRef.current,
-                xpOrbsCollected: 0, 
+                xpOrbsCollected: 0,
                 difficulty: game.difficulty
             };
-            
+
             const newUnlocks = evaluateUnlocks(stats, unlockedCosmetics);
             newUnlocks.forEach(id => game.unlockCosmetic(id));
         }
-    }, [status, game.stageRef.current]);
+    }, [status, game.difficulty, unlockedCosmetics, game.unlockCosmetic]);
 
     // Resize Handler
     useEffect(() => {

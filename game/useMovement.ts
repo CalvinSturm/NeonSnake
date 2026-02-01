@@ -55,7 +55,8 @@ export function useMovement(
     cameraRef,
     bossActiveRef,
     bossEnemyRef,
-    levelRef
+    levelRef,
+    enemyVisualsRef
   } = game;
 
   // ─────────────────────────────
@@ -311,8 +312,11 @@ export function useMovement(
             }
         }
 
-        // Global Timers
-        if (e.flash && e.flash > 0) e.flash = Math.max(0, e.flash - frameUnits);
+        // Global Timers - Visual flash (from enemyVisualsRef)
+        const vis = enemyVisualsRef.current.get(e.id);
+        if (vis && vis.flash > 0) {
+            vis.flash = Math.max(0, vis.flash - frameUnits);
+        }
         if (e.hitCooldowns) {
             for (const key in e.hitCooldowns) {
                 if (e.hitCooldowns[key] > 0) {
@@ -402,6 +406,7 @@ export function useMovement(
     [
       difficulty,
       enemiesRef,
+      enemyVisualsRef,
       wallsRef,
       directionRef,
       powerUpsRef,
@@ -412,8 +417,8 @@ export function useMovement(
       getMoveInterval,
       statsRef,
       game.stageRef,
-      updateStamina, 
-      isStoppedRef, 
+      updateStamina,
+      isStoppedRef,
       viewport,
       cameraRef,
       bossActiveRef,

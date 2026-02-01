@@ -240,37 +240,30 @@ export function useCollisions(
              return; 
         }
 
-        // Check against Body
+        // Check against Body (Tail is invulnerable - only knockback enemies)
         for (let i = 1; i < snakeBody.length; i++) {
              const seg = snakeBody[i];
              const d = Math.hypot(e.x - seg.x, e.y - seg.y);
              if (d < 0.8) {
+                 // Reactive lightning still triggers on contact
                  if (traitsRef.current.reactiveLightningChance > 0 && Math.random() < traitsRef.current.reactiveLightningChance) {
-                     damageEnemy(e, 20); 
-                     fx.triggerLightning({ 
-                         id: Math.random().toString(), 
-                         x1: seg.x * DEFAULT_SETTINGS.gridSize + 10, 
+                     damageEnemy(e, 20);
+                     fx.triggerLightning({
+                         id: Math.random().toString(),
+                         x1: seg.x * DEFAULT_SETTINGS.gridSize + 10,
                          y1: seg.y * DEFAULT_SETTINGS.gridSize + 10,
-                         x2: e.x * DEFAULT_SETTINGS.gridSize + 10, 
+                         x2: e.x * DEFAULT_SETTINGS.gridSize + 10,
                          y2: e.y * DEFAULT_SETTINGS.gridSize + 10,
                          life: 0.5,
                          color: '#ffff00'
                      });
                  }
-                 
-                 const dmg = 5 * traitsRef.current.tailIntegrityDamageMod;
-                 if (invulnerabilityTimeRef.current <= 1000000) {
-                     tailIntegrityRef.current = Math.max(0, tailIntegrityRef.current - dmg);
-                 }
-                 
+
+                 // Knockback enemy away from tail segment (no damage to tail)
                  const ang = Math.atan2(e.y - seg.y, e.x - seg.x);
                  e.x += Math.cos(ang) * 0.5;
                  e.y += Math.sin(ang) * 0.5;
-                 
-                 if (tailIntegrityRef.current <= 0 && invulnerabilityTimeRef.current <= 1000000) {
-                     handleDeath('HULL_BREACH');
-                 }
-                 break; 
+                 break;
              }
         }
     });
@@ -339,6 +332,10 @@ export function useCollisions(
           const activeRadius = t.radius;
 
           if (dist < activeRadius) {
+              // Track when hacking started for sound effect
+              if (!t.isBeingHacked) {
+                  t.lastEffectTime = Date.now();
+              }
               t.isBeingHacked = true;
               t.progress += dt;
               

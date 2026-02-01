@@ -28,7 +28,7 @@ export function useMusic(game: ReturnType<typeof useGameState>) {
       }
 
       if (
-          status === GameStatus.IDLE || 
+          status === GameStatus.IDLE ||
           status === GameStatus.DIFFICULTY_SELECT ||
           status === GameStatus.CHARACTER_SELECT ||
           status === GameStatus.CONFIGURATION ||
@@ -36,6 +36,10 @@ export function useMusic(game: ReturnType<typeof useGameState>) {
           status === GameStatus.GAME_OVER
       ) {
           audio.setMode('MENU');
+          // Reset threat state so music starts fresh on new game
+          currentThreatRef.current = 0;
+          lastThreatChangeTimeRef.current = 0;
+          audio.setThreat(0);
           // Ensure loop is active if we are in a menu state
           audio.startMusic();
       }
@@ -60,11 +64,14 @@ export function useMusic(game: ReturnType<typeof useGameState>) {
       audio.setHackProgress(maxProgress);
 
       // 2. CALCULATE RAW THREAT
-      // STABILITY CHANGE: Threat is now strictly determined by Boss presence.
-      // We no longer scale based on enemy count to prevent jarring music shifts within a level.
+      // Threat builds based on stage progression within 5-stage cycle, maxing at boss
       let rawThreat = 0;
       if (isBoss) {
           rawThreat = 3; // Boss Theme (Max Intensity)
+      } else {
+          // Build up threat based on stage within 5-stage cycle (0-4)
+          const stageInCycle = ((stageRef.current - 1) % 5); // 0, 1, 2, 3, 4
+          rawThreat = Math.min(2, Math.floor(stageInCycle / 2)); // 0, 0, 1, 1, 2
       }
 
       // 3. APPLY HYSTERESIS (Fast Attack, Slow Decay for Boss Transitions)

@@ -56,34 +56,43 @@ const HITBOX_WIDE: HitboxDef = {
 const PHASE_2_TABLE: BossStateTable = {
     'IDLE': {
         id: 'IDLE',
-        duration: 1000, 
+        duration: 800,
         next: 'TELEGRAPH_WIDE',
         onEnter: [
-            { type: 'SPAWN_MINIONS', enemyType: EnemyType.HUNTER, count: 1, offset: { x: 5, y: 5 } } // Spawn support
+            { type: 'SPAWN_MINIONS', enemyType: EnemyType.HUNTER, count: 1, offset: { x: 5, y: 5 } }
         ]
     },
     'TELEGRAPH_WIDE': {
         id: 'TELEGRAPH_WIDE',
-        duration: 600,
+        duration: 500,
         next: 'EXECUTE_WIDE',
         onEnter: []
     },
     'EXECUTE_WIDE': {
         id: 'EXECUTE_WIDE',
         duration: 400,
-        next: 'RECOVERY',
+        next: 'BARRAGE',
         onEnter: [
             { type: 'SPAWN_HITBOX', hitboxDef: HITBOX_WIDE },
-            { type: 'APPLY_EFFECT', effect: 'SLOW', duration: 2000 } // Gravitational suppression
+            { type: 'APPLY_EFFECT', effect: 'SLOW', duration: 2000 }
+        ]
+    },
+    'BARRAGE': {
+        id: 'BARRAGE',
+        duration: 600,
+        next: 'RECOVERY',
+        onEnter: [
+            // Fire a ring of projectiles outward
+            { type: 'SPAWN_PROJECTILE', angle: 0, speed: 20, damage: 20, count: 8, spread: Math.PI * 2 }
+        ],
+        onExit: [
+            { type: 'DESPAWN_HITBOX', tag: 'WIDE_ZONE' }
         ]
     },
     'RECOVERY': {
         id: 'RECOVERY',
-        duration: 1000,
-        next: 'IDLE',
-        onExit: [
-            { type: 'DESPAWN_HITBOX', tag: 'WIDE_ZONE' }
-        ]
+        duration: 800,
+        next: 'IDLE'
     }
 };
 

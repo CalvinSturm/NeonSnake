@@ -1,6 +1,6 @@
 
 import { RenderContext, UIRequest } from '../types';
-import { Mine, FoodItem, Enemy, EnemyType, FoodType, Point, Direction } from '../../../types';
+import { Mine, FoodItem, Enemy, EnemyType, FoodType, Point, Direction, EnemyVisualMap, Terminal } from '../../../types';
 import { COLORS, DEFAULT_SETTINGS } from '../../../constants';
 import { drawShadow, drawSphere } from '../primitives';
 import { renderBoss } from '../entities/renderBoss';
@@ -8,9 +8,10 @@ import { renderWarden } from '../entities/renderWarden';
 import { renderSpaceship } from '../entities/renderSpaceship';
 import { renderEnemy } from '../entities/renderEnemy';
 import { renderSnake } from '../entities/renderSnake';
+import { renderTerminalPylon } from '../entities/renderTerminalPylon';
 
 interface Renderable {
-    y: number; 
+    y: number;
     draw: () => UIRequest | void;
 }
 
@@ -30,12 +31,14 @@ export const renderEntities = (
     tailIntegrity: number,
     phaseRailCharge: number,
     echoDamageStored: number,
-    prismLanceTimer: number
+    prismLanceTimer: number,
+    enemyVisuals: EnemyVisualMap, // VISUAL SEPARATION
+    terminals: Terminal[] = []   // Added for depth sorting
 ) => {
     const { ctx, gridSize, halfGrid, now, gameTime, reduceFlashing } = rc;
     const PI2 = Math.PI * 2;
     const renderList: Renderable[] = [];
-    
+
     // Store UI requests for the post-entity pass
     const uiQueue: UIRequest[] = [];
 
@@ -44,7 +47,7 @@ export const renderEntities = (
         if (m.shouldRemove) continue;
         const cx = m.x * gridSize + halfGrid;
         const cy = m.y * gridSize + halfGrid;
-        
+
         renderList.push({
             y: m.y,
             draw: () => {
@@ -59,11 +62,11 @@ export const renderEntities = (
 
                 ctx.save();
                 ctx.translate(cx, cy);
-                
+
                 const hover = Math.sin(now / 300) * 2;
                 ctx.translate(0, hover);
                 ctx.rotate(now / 300);
-                
+
                 ctx.fillStyle = COLORS.mine;
                 ctx.shadowColor = COLORS.mine;
                 ctx.shadowBlur = 8;
@@ -74,7 +77,7 @@ export const renderEntities = (
                 ctx.lineWidth = 3;
                 ctx.strokeStyle = COLORS.mine;
                 ctx.stroke();
-                
+
                 drawSphere(ctx, 0, 0, 4, '#ffaa00');
                 ctx.restore();
                 ctx.shadowBlur = 0;
@@ -87,7 +90,7 @@ export const renderEntities = (
         if (f.shouldRemove) continue;
         const cx = f.x * gridSize + halfGrid;
         const cy = f.y * gridSize + halfGrid;
-        
+
         renderList.push({
             y: f.y,
             draw: () => {
@@ -99,10 +102,10 @@ export const renderEntities = (
 
                     ctx.save();
                     ctx.translate(cx, cy);
-                    
+
                     const hover = Math.sin((now / 200) + (f.x * 0.5)) * 4;
                     ctx.translate(0, hover);
-                    
+
                     ctx.globalCompositeOperation = 'screen';
                     ctx.fillStyle = COLORS.xpOrb;
                     ctx.globalAlpha = 0.3;
@@ -115,21 +118,21 @@ export const renderEntities = (
                     ctx.restore();
                 } else {
                     drawShadow(ctx, cx, cy + 12, 6);
-                    
+
                     ctx.save();
                     ctx.translate(cx, cy);
 
                     const hover = Math.sin(now / 300 + f.x) * 3;
                     ctx.translate(0, hover);
-                    
+
                     const size = 10;
-                    ctx.rotate(now / 400 + (f.x * 0.2)); 
+                    ctx.rotate(now / 400 + (f.x * 0.2));
                     ctx.fillStyle = COLORS.foodNormal;
                     ctx.shadowColor = COLORS.foodNormal;
                     ctx.shadowBlur = 15;
-                    ctx.fillRect(-size/2, -size/2, size, size);
+                    ctx.fillRect(-size / 2, -size / 2, size, size);
                     ctx.fillStyle = 'rgba(255,255,255,0.5)';
-                    ctx.fillRect(-size/2, -size/2, size, size/3);
+                    ctx.fillRect(-size / 2, -size / 2, size, size / 3);
                     ctx.shadowBlur = 0;
                     ctx.restore();
                 }
@@ -137,7 +140,18 @@ export const renderEntities = (
         });
     }
 
-    // 3. ENEMIES
+    // 3. TERMINALS (Pylons for depth sorting - floor effects rendered in renderEnvironment)
+    for (const t of terminals) {
+        if (t.shouldRemove) continue;
+        renderList.push({
+            y: t.y,
+            draw: () => {
+                renderTerminalPylon(ctx, t, gridSize, halfGrid, now, snake[0]);
+            }
+        });
+    }
+
+    // 4. ENEMIES
     enemies.forEach(e => {
         if (e.shouldRemove) return;
         renderList.push({
@@ -147,7 +161,7 @@ export const renderEntities = (
                 if (e.state === 'SPAWNING') {
                     scale = Math.max(0, Math.min(1, (gameTime - e.spawnTime) / 500));
                 }
-                
+
                 const cx = e.x * gridSize + halfGrid;
                 const cy = e.y * gridSize + halfGrid;
 
@@ -155,7 +169,7 @@ export const renderEntities = (
                 ctx.translate(cx, cy);
                 ctx.scale(scale, scale);
 
-                let req: UIRequest | void;
+                let req: UIRequest | void = undefined;
 
                 if (e.type === EnemyType.BOSS) {
                     if (e.bossConfigId === 'WARDEN_07') {
@@ -167,47 +181,49 @@ export const renderEntities = (
                     }
                 } else {
                     // Collect UI requests from Standard Enemies
-                    req = renderEnemy(ctx, e, gridSize, halfGrid, snake[0], now, !!reduceFlashing, rc.camera.tilt);
+                    const vis = enemyVisuals.get(e.id);
+                    const flash = vis ? vis.flash : 0;
+                    req = renderEnemy(ctx, e, gridSize, halfGrid, snake[0], now, !!reduceFlashing, rc.camera.tilt, flash);
                 }
-                
+
                 ctx.restore();
                 return req;
             }
         });
     });
 
-    // 4. SNAKE
+    // 5. SNAKE
     if (snake.length > 0) {
         const head = snake[0];
         renderList.push({
-            y: head.y, 
+            y: head.y,
             draw: () => {
                 renderSnake(
-                    rc, 
-                    snake, 
-                    prevTail, 
-                    direction, 
-                    stats, 
-                    charProfile, 
-                    moveProgress, 
-                    visualNsAngle, 
-                    tailIntegrity, 
-                    phaseRailCharge, 
-                    echoDamageStored, 
+                    rc,
+                    snake,
+                    prevTail,
+                    direction,
+                    stats,
+                    charProfile,
+                    moveProgress,
+                    visualNsAngle,
+                    tailIntegrity,
+                    phaseRailCharge,
+                    echoDamageStored,
                     prismLanceTimer
                 );
             }
         });
     }
 
-    // 5. RENDER SORTED ENTITIES
+    // 6. RENDER SORTED ENTITIES
     renderList.sort((a, b) => a.y - b.y);
     renderList.forEach(item => {
         const req = item.draw();
         if (req) uiQueue.push(req);
     });
 
-    // 6. RENDER FLOATING UI (POST PASS)
+    // 7. RENDER FLOATING UI (POST PASS)
     // We escape the camera transform to render UI in absolute screen coordinates
     // This prevents text/bars from being tilted or scaled by the 2.5D projection
     ctx.save();
@@ -216,24 +232,24 @@ export const renderEntities = (
     uiQueue.forEach(ui => {
         if (ui.type === 'HEALTH_BAR') {
             const hpPct = Math.max(0, ui.value / ui.max);
-            
+
             // Background with Border for high visibility
             ctx.fillStyle = '#000000';
-            ctx.fillRect(ui.x - ui.width/2 - 1, ui.y - 1, ui.width + 2, ui.height + 2);
-            
+            ctx.fillRect(ui.x - ui.width / 2 - 1, ui.y - 1, ui.width + 2, ui.height + 2);
+
             // White Border
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.lineWidth = 1;
-            ctx.strokeRect(ui.x - ui.width/2 - 0.5, ui.y - 0.5, ui.width + 1, ui.height + 1);
-            
+            ctx.strokeRect(ui.x - ui.width / 2 - 0.5, ui.y - 0.5, ui.width + 1, ui.height + 1);
+
             // Fill Color Logic
             let fillColor = '#00ff00';
             if (hpPct <= 0.2) fillColor = '#ff0000';
             else if (hpPct <= 0.5) fillColor = '#ffaa00';
-            
+
             // Bar
             ctx.fillStyle = fillColor;
-            ctx.fillRect(ui.x - ui.width/2, ui.y, ui.width * hpPct, ui.height);
+            ctx.fillRect(ui.x - ui.width / 2, ui.y, ui.width * hpPct, ui.height);
         }
     });
 

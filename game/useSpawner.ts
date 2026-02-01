@@ -3,10 +3,10 @@ import { useCallback } from 'react';
 import { FoodType, EnemyType, Point, Direction, Difficulty, TerminalType, BossEnemy, Enemy, DifficultyConfig } from '../types';
 import {
   ENEMY_BASE_HP, BOSS_BASE_HP,
-  TERMINAL_HACK_RADIUS, TERMINAL_HACK_TIME, DIFFICULTY_CONFIGS, COLORS,
+  TERMINAL_HACK_RADIUS, TERMINAL_HACK_TIME, TERMINAL_TIME_BY_DIFFICULTY, DIFFICULTY_CONFIGS, COLORS,
   ENEMY_PHYSICS_DEFAULTS,
   SPAWN_CONFIG, XP_CHUNK_THRESHOLDS, XP_CHUNK_VALUES,
-  FALLBACK_SPAWN_POS, NEOPHYTE_SPAWN_WEIGHTS, ENEMY_UNLOCK_THRESHOLDS,
+  FALLBACK_SPAWN_POS, NEOPHYTE_SPAWN_WEIGHTS, STAGE_ENEMY_UNLOCKS,
   BOSS_SPAWN_SHAKE, BASE_ENEMY_SPEED
 } from '../constants';
 import { getRandomPos } from './gameUtils';
@@ -16,7 +16,7 @@ import { getUnlockedMemoryIds } from './memory/MemorySystem';
 import { SENTINEL_BOSS_CONFIG } from './boss/definitions/SentinelBoss';
 import { WARDEN_BOSS_CONFIG } from './boss/definitions/WardenBoss';
 import { SPACESHIP_BOSS_CONFIG } from './boss/definitions/SpaceshipBoss';
-import { getTierFromDifficulty, getMaxEnemies, scaleEnemy } from './difficultyScaler';
+import { getTierFromDifficulty, getMaxEnemies, scaleEnemy, getSpawnBurstCount, getSpawnInterval } from './difficultyScaler';
 
 // ─── HELPERS ───
 
@@ -275,25 +275,27 @@ export function useSpawner(
         let type: TerminalType = 'RESOURCE';
         let color = COLORS.terminal;
         let associatedFileId: string | undefined;
-        let totalTime = TERMINAL_HACK_TIME;
+        // Scale terminal hack time by difficulty
+        const diffTimeScale = TERMINAL_TIME_BY_DIFFICULTY[difficulty] || 1.0;
+        let totalTime = TERMINAL_HACK_TIME * diffTimeScale;
 
         if (forcedId === 'BOSS_OVERRIDE') {
             type = 'OVERRIDE';
             color = '#ffaa00';
-            totalTime = SPAWN_CONFIG.terminalOverrideTime;
+            totalTime = SPAWN_CONFIG.terminalOverrideTime * diffTimeScale;
         } else {
             // Memory Terminal Logic
             if (Math.random() < 0.15) {
                 const unlocked = getUnlockedMemoryIds();
                 const files = ROOT_FILESYSTEM.contents.filter(f => f.type === 'file');
                 const lockedFiles = files.filter(f => !unlocked.includes(f.id));
-                
+
                 if (lockedFiles.length > 0) {
                     type = 'MEMORY';
                     color = '#ffd700'; // Gold
                     const file = lockedFiles[Math.floor(Math.random() * lockedFiles.length)];
                     associatedFileId = file.id;
-                    totalTime = SPAWN_CONFIG.terminalMemoryTime;
+                    totalTime = SPAWN_CONFIG.terminalMemoryTime * diffTimeScale;
                 }
             }
         }
@@ -310,7 +312,7 @@ export function useSpawner(
           associatedFileId
         });
     }
-  }, [terminalsRef, foodRef, enemiesRef, snakeRef, wallsRef, viewport]);
+  }, [terminalsRef, foodRef, enemiesRef, snakeRef, wallsRef, viewport, difficulty]);
 
   // ─────────────────────────────
   // ENEMY
@@ -424,21 +426,56 @@ export function useSpawner(
     }
 
     // ── PROGRESSIVE UNLOCK LOGIC ──
-    const availableTypes = [EnemyType.HUNTER];
-    
-    if (stageRef.current > ENEMY_UNLOCK_THRESHOLDS[EnemyType.INTERCEPTOR]) {
+    // Filter by BOTH stage unlock AND difficulty config's allowedEnemies
+    const allowedByDiff = new Set(diffConfig.allowedEnemies);
+    const currentStage = stageRef.current;
+
+    // Build available types based on stage thresholds AND difficulty allowlist
+    const availableTypes: EnemyType[] = [];
+
+    // Hunter is always base
+    if (allowedByDiff.has(EnemyType.HUNTER) && currentStage >= STAGE_ENEMY_UNLOCKS[EnemyType.HUNTER]) {
+        availableTypes.push(EnemyType.HUNTER);
+    }
+
+    // Interceptor unlocks at stage 2+
+    if (allowedByDiff.has(EnemyType.INTERCEPTOR) && currentStage >= STAGE_ENEMY_UNLOCKS[EnemyType.INTERCEPTOR]) {
         availableTypes.push(EnemyType.INTERCEPTOR);
     }
-    if (stageRef.current > ENEMY_UNLOCK_THRESHOLDS[EnemyType.SHOOTER]) {
+
+    // Shooter unlocks at stage 4+
+    if (allowedByDiff.has(EnemyType.SHOOTER) && currentStage >= STAGE_ENEMY_UNLOCKS[EnemyType.SHOOTER]) {
         availableTypes.push(EnemyType.SHOOTER);
     }
-    if (stageRef.current > ENEMY_UNLOCK_THRESHOLDS[EnemyType.DASHER]) {
+
+    // Dasher unlocks at stage 6+
+    if (allowedByDiff.has(EnemyType.DASHER) && currentStage >= STAGE_ENEMY_UNLOCKS[EnemyType.DASHER]) {
         availableTypes.push(EnemyType.DASHER);
     }
 
-    const type = forcedType ?? availableTypes[
-        Math.floor(Math.random() * availableTypes.length)
-    ];
+    // Fallback to Hunter if somehow empty
+    if (availableTypes.length === 0) {
+        availableTypes.push(EnemyType.HUNTER);
+    }
+
+    // Weighted selection - newer enemy types have slightly higher spawn weight
+    // to make progression feel impactful
+    const getWeightedType = (): EnemyType => {
+        const weights: number[] = availableTypes.map((_, idx) => {
+            // Base weight + bonus for being a "newer" unlock
+            return 1.0 + (idx * 0.3);
+        });
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let rand = Math.random() * totalWeight;
+
+        for (let i = 0; i < availableTypes.length; i++) {
+            rand -= weights[i];
+            if (rand <= 0) return availableTypes[i];
+        }
+        return availableTypes[availableTypes.length - 1];
+    };
+
+    const type = forcedType ?? getWeightedType();
 
     const finalHp = (type === EnemyType.INTERCEPTOR && bossActiveRef.current) 
         ? ENEMY_BASE_HP * 0.5 
@@ -523,12 +560,29 @@ export function useSpawner(
     enemySpawnTimerRef.current += dt;
     terminalSpawnTimerRef.current += dt;
 
-    if (enemySpawnTimerRef.current >= SPAWN_CONFIG.enemySpawnInterval) {
+    // Calculate difficulty-adjusted spawn interval
+    const tier = getTierFromDifficulty(difficulty);
+    const baseInterval = SPAWN_CONFIG.baseEnemySpawnInterval;
+    const adjustedInterval = Math.max(
+        SPAWN_CONFIG.minEnemySpawnInterval,
+        getSpawnInterval(tier, baseInterval)
+    );
+
+    if (enemySpawnTimerRef.current >= adjustedInterval) {
       // Only spawn if stage is NOT clearing
       if (!stageReadyRef.current) {
-          spawnEnemy();
+          // Burst spawning - spawn multiple enemies at once on higher difficulties
+          const burstCount = getSpawnBurstCount(tier, stageRef.current);
+          const maxEnemies = getMaxEnemies(tier);
+
+          for (let i = 0; i < burstCount; i++) {
+              // Check max enemies limit per spawn
+              if (enemiesRef.current.length < maxEnemies) {
+                  spawnEnemy();
+              }
+          }
       }
-      enemySpawnTimerRef.current -= SPAWN_CONFIG.enemySpawnInterval;
+      enemySpawnTimerRef.current -= adjustedInterval;
     }
 
     if (terminalSpawnTimerRef.current >= SPAWN_CONFIG.terminalSpawnInterval) {
@@ -538,9 +592,10 @@ export function useSpawner(
       terminalSpawnTimerRef.current -= SPAWN_CONFIG.terminalSpawnInterval;
     }
   }, [
-      difficulty, bossActiveRef, spawnEnemy, spawnTerminal, terminalsRef, 
-      enemySpawnTimerRef, terminalSpawnTimerRef, foodRef, spawnFood, 
-      stageReadyRef, bossOverrideTimerRef, audioEventsRef, cleanupFood
+      difficulty, bossActiveRef, spawnEnemy, spawnTerminal, terminalsRef,
+      enemySpawnTimerRef, terminalSpawnTimerRef, foodRef, spawnFood,
+      stageReadyRef, bossOverrideTimerRef, audioEventsRef, cleanupFood,
+      enemiesRef, stageRef
   ]);
 
   return { update, spawnFood, spawnLoot, spawnXpOrbs, spawnEnemy, spawnTerminal, cleanupFood, pruneEnemies };

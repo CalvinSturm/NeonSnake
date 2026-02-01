@@ -51,7 +51,8 @@ export const AI_CONFIG = {
 export const SPAWN_CONFIG = {
     spawnMargin: 2,
     spawnSafeRadius: 10,
-    enemySpawnInterval: 2000,
+    baseEnemySpawnInterval: 1500,  // Base interval (modified by difficulty)
+    minEnemySpawnInterval: 400,    // Fastest possible spawn rate
     terminalSpawnInterval: 15000,
     xpOrbLifespan: 30000,
     xpOrbMargin: 2,
@@ -60,7 +61,18 @@ export const SPAWN_CONFIG = {
     bossSpawnY: 5,
     bossOverrideInterval: 8000,
     terminalOverrideTime: 5000,
-    terminalMemoryTime: 8000
+    terminalMemoryTime: 8000,
+    // Wave spawning for survivor feel
+    waveSize: { min: 1, max: 3 },        // Enemies per spawn event
+    waveScalePerStage: 0.1               // +10% wave size per stage
+};
+
+// Per-difficulty spawn interval multipliers (lower = faster spawns)
+export const DIFFICULTY_SPAWN_RATES: Record<Difficulty, number> = {
+    [Difficulty.EASY]: 1.3,      // Slower spawns
+    [Difficulty.MEDIUM]: 1.0,    // Normal
+    [Difficulty.HARD]: 0.75,     // Faster spawns
+    [Difficulty.INSANE]: 0.5     // Much faster spawns
 };
 
 export const XP_CHUNK_THRESHOLDS = {
@@ -83,13 +95,6 @@ export const NEOPHYTE_SPAWN_WEIGHTS: Record<string, number[]> = {
     'DOWN': [1, 1, 0, 1],
     'LEFT': [1, 1, 1, 0],
     'RIGHT': [1, 0, 1, 1]
-};
-
-export const ENEMY_UNLOCK_THRESHOLDS = {
-    [EnemyType.INTERCEPTOR]: 2,
-    [EnemyType.SHOOTER]: 4,
-    [EnemyType.DASHER]: 8,
-    [EnemyType.BOSS]: 999 // Boss spawns by stage logic
 };
 
 export const BOSS_SPAWN_SHAKE = 20;
@@ -137,6 +142,14 @@ export const ENEMY_BASE_HP = 100;
 export const BOSS_BASE_HP = 2000;
 export const TERMINAL_HACK_RADIUS = 3;
 export const TERMINAL_HACK_TIME = 3000;
+
+// Terminal hack time scaled by difficulty (multiplier applied to TERMINAL_HACK_TIME)
+export const TERMINAL_TIME_BY_DIFFICULTY: Record<string, number> = {
+    [Difficulty.EASY]: 0.5,      // 1.5 seconds
+    [Difficulty.NORMAL]: 0.75,   // 2.25 seconds
+    [Difficulty.HARD]: 1.0,      // 3 seconds
+    [Difficulty.ELITE]: 1.25     // 3.75 seconds
+};
 
 export const ENEMY_PHYSICS_DEFAULTS: Record<string, any> = {
     [EnemyType.HUNTER]: { usesVerticalPhysics: false, canJump: false },
@@ -206,24 +219,24 @@ export const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
         id: Difficulty.EASY,
         label: 'NEOPHYTE',
         description: 'Predictable patterns. Ideal for initialization.',
-        spawnRateMod: 1.5,
+        spawnRateMod: 1.3,
         hpMod: 0.7,
-        speedMod: 0.9,
+        speedMod: 0.85,
         xpMultiplier: 0.8,
-        lootSpawnRate: 0.7,
+        lootSpawnRate: 0.8,
         allowedEnemies: [EnemyType.HUNTER],
         bossHpMod: 0.6,
         unlockCondition: 'DEFAULT',
         stageGoal: 4,
         color: 'text-green-400',
         lootMagnetMod: 1.5,
-        aiAggressionMod: 1.2
+        aiAggressionMod: 1.4  // Higher = slower/less aggressive AI
     },
     [Difficulty.MEDIUM]: {
         id: Difficulty.MEDIUM,
         label: 'OPERATOR',
         description: 'Aggressive drones. Interceptors deployed.',
-        spawnRateMod: 1.1,
+        spawnRateMod: 1.0,
         hpMod: 1.0,
         speedMod: 1.0,
         xpMultiplier: 1.0,
@@ -234,42 +247,52 @@ export const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
         stageGoal: 8,
         color: 'text-cyan-400',
         lootMagnetMod: 1.0,
-        aiAggressionMod: 1.0
+        aiAggressionMod: 1.0  // Normal aggression
     },
     [Difficulty.HARD]: {
         id: Difficulty.HARD,
         label: 'VETERAN',
         description: 'High threat density. Tactical Shooters active.',
-        spawnRateMod: 0.8, 
-        hpMod: 1.4,
-        speedMod: 1.15,
-        xpMultiplier: 1.2,
+        spawnRateMod: 0.75,
+        hpMod: 1.3,
+        speedMod: 1.2,
+        xpMultiplier: 1.3,
         lootSpawnRate: 1.2,
         allowedEnemies: [EnemyType.HUNTER, EnemyType.INTERCEPTOR, EnemyType.SHOOTER],
         bossHpMod: 1.6,
         unlockCondition: 'Clear Stage 8',
         stageGoal: 12,
         color: 'text-orange-400',
-        lootMagnetMod: 0.8, 
-        aiAggressionMod: 0.8 
+        lootMagnetMod: 0.9,
+        aiAggressionMod: 0.75  // Lower = faster/more aggressive AI
     },
     [Difficulty.INSANE]: {
         id: Difficulty.INSANE,
         label: 'CYBERPSYCHO',
         description: 'Maximum lethality. Chaotic Dashers inbound.',
-        spawnRateMod: 0.5, 
-        hpMod: 2.2,
-        speedMod: 1.3,
+        spawnRateMod: 0.5,
+        hpMod: 1.8,
+        speedMod: 1.4,
         xpMultiplier: 1.5,
         lootSpawnRate: 1.5,
         allowedEnemies: [EnemyType.HUNTER, EnemyType.INTERCEPTOR, EnemyType.SHOOTER, EnemyType.DASHER],
-        bossHpMod: 3.0,
+        bossHpMod: 2.5,
         unlockCondition: 'Clear Stage 12',
         stageGoal: 999,
         color: 'text-red-500',
-        lootMagnetMod: 0.5, 
-        aiAggressionMod: 0.6 
+        lootMagnetMod: 0.7,
+        aiAggressionMod: 0.5   // Very aggressive AI
     }
+};
+
+// Stage-based enemy unlock thresholds WITHIN each difficulty
+// These apply after the difficulty's allowedEnemies filter
+export const STAGE_ENEMY_UNLOCKS: Record<EnemyType, number> = {
+    [EnemyType.HUNTER]: 1,       // Always available
+    [EnemyType.INTERCEPTOR]: 2,  // Stage 2+
+    [EnemyType.SHOOTER]: 4,      // Stage 4+
+    [EnemyType.DASHER]: 6,       // Stage 6+
+    [EnemyType.BOSS]: 999
 };
 
 const BASE_WEAPON_STATS = {
@@ -322,7 +345,15 @@ export const CHARACTERS: CharacterProfile[] = [
         description: 'Area denial specialist. Critical strike probability increases with sync level.',
         color: '#fef08a',
         initialStats: {
-            weapon: { ...BASE_WEAPON_STATS, chainLightningLevel: 1 },
+            weapon: {
+                ...BASE_WEAPON_STATS,
+                cannonLevel: 1,
+                cannonDamage: 15,
+                cannonFireRate: 600,
+                chainLightningLevel: 1,
+                chainLightningDamage: 0.5,  // UPGRADE_BASES.LIGHTNING_DMG
+                chainLightningRange: 8      // UPGRADE_BASES.LIGHTNING_RANGE
+            },
         },
         traits: [
             { name: 'Overcharge', type: 'MINOR', description: '+20% Area of Effect Size' },
@@ -336,7 +367,13 @@ export const CHARACTERS: CharacterProfile[] = [
         description: 'Fortification expert. Trap damage scales with system integration.',
         color: '#fdba74',
         initialStats: {
-            weapon: { ...BASE_WEAPON_STATS, mineLevel: 1, mineDropRate: 3000 },
+            weapon: {
+                ...BASE_WEAPON_STATS,
+                mineLevel: 1,
+                mineDropRate: 3000,
+                mineDamage: 50,    // UPGRADE_BASES.MINE_DMG
+                mineRadius: 2.5
+            },
         },
         traits: [
             { name: 'Payload', type: 'MINOR', description: '+30% Mine Duration' },
@@ -350,7 +387,12 @@ export const CHARACTERS: CharacterProfile[] = [
         description: 'Armored hull. Self-repair subroutines enhance survivability.',
         color: '#3b82f6',
         initialStats: {
-            weapon: { ...BASE_WEAPON_STATS },
+            weapon: {
+                ...BASE_WEAPON_STATS,
+                cannonLevel: 1,
+                cannonDamage: 20,      // UPGRADE_BASES.CANNON_DMG
+                cannonFireRate: 500    // UPGRADE_BASES.CANNON_FIRE_RATE
+            },
             shieldActive: true
         },
         traits: [
@@ -365,7 +407,12 @@ export const CHARACTERS: CharacterProfile[] = [
         description: 'Unstable engine. Damage output scales with combo momentum.',
         color: '#f472b6',
         initialStats: {
-            weapon: { ...BASE_WEAPON_STATS, auraLevel: 1 },
+            weapon: {
+                ...BASE_WEAPON_STATS,
+                auraLevel: 1,
+                auraDamage: 15,    // UPGRADE_BASES.AURA_DMG
+                auraRadius: 2.5   // UPGRADE_BASES.AURA_RADIUS
+            },
         },
         traits: [
             { name: 'Afterburner', type: 'MINOR', description: '+10% Base Movement Speed' },

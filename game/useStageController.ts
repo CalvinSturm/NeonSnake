@@ -8,7 +8,8 @@ import { GameStatus, EnemyType, Direction, CameraMode } from '../types';
 import {
   DIFFICULTY_CONFIGS,
   POINTS_PER_STAGE,
-  TRANSITION_DURATION
+  TRANSITION_DURATION,
+  STAMINA_CONFIG
 } from '../constants';
 import { generateWalls } from './gameUtils';
 import { audio } from '../utils/audio';
@@ -60,7 +61,12 @@ export function useStageController(
     requestCameraSwitch,
     addNeonFragments, // Currency
     audioEventsRef,
-    viewport // NEW: Viewport Access
+    viewport, // NEW: Viewport Access
+    // Brake/Stamina state (reset on stage advance)
+    isStoppedRef,
+    stopIntentRef,
+    staminaRef,
+    stopCooldownRef
   } = game;
 
   const { unlockNextDifficulty } = progression;
@@ -107,6 +113,13 @@ export function useStageController(
 
     directionRef.current = Direction.RIGHT;
     directionQueueRef.current = [];
+
+    // Reset brake/stamina state to prevent stuck braking on new stage
+    isStoppedRef.current = false;
+    stopIntentRef.current = false;
+    stopCooldownRef.current = false;
+    staminaRef.current = STAMINA_CONFIG.MAX;
+    audio.setStopEffect(false); // Stop brake audio
 
     foodRef.current = [];
     enemiesRef.current = [];
@@ -172,7 +185,11 @@ export function useStageController(
     bossOverrideTimerRef,
     setUiStageStatus,
     requestCameraSwitch,
-    viewport
+    viewport,
+    isStoppedRef,
+    stopIntentRef,
+    staminaRef,
+    stopCooldownRef
   ]);
 
   // ─────────────────────────────────────────────

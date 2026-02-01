@@ -82,12 +82,48 @@ export const renderProjectiles = (rc: RenderContext, projectiles: Projectile[]) 
             for(let i = -1; i <= 1; i++) { ctx.fillRect(i * 18, -width * 1.5, 3, width * 3); }
         } else if (p.type === 'SERPENT') {
             const idOffset = p.id ? p.id.charCodeAt(0) : 0;
-            const wiggle = Math.sin((now * 0.015) + idOffset) * 4; 
-            ctx.translate(0, wiggle); 
+            const wiggle = Math.sin((now * 0.015) + idOffset) * 4;
+            ctx.translate(0, wiggle);
             const grad = ctx.createRadialGradient(-2, -2, 0, 0, 0, p.size);
             grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.4, p.color); grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
             ctx.fillStyle = grad; ctx.shadowColor = p.color; ctx.shadowBlur = 15; ctx.beginPath(); ctx.arc(0, 0, p.size * 1.5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; ctx.fillRect(2, -3, 2, 2); ctx.fillRect(2, 3, 2, 2);
+        } else if (p.type === 'BOSS_PROJECTILE') {
+            // Menacing red energy orb with pulsing core
+            const pulseSize = p.size * (1 + Math.sin(now * 0.03) * 0.2);
+
+            // Outer glow
+            ctx.globalCompositeOperation = 'screen';
+            const outerGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, pulseSize * 2);
+            outerGrad.addColorStop(0, 'rgba(255, 100, 100, 0.8)');
+            outerGrad.addColorStop(0.5, 'rgba(255, 0, 0, 0.4)');
+            outerGrad.addColorStop(1, 'rgba(100, 0, 0, 0)');
+            ctx.fillStyle = outerGrad;
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(0, 0, pulseSize * 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core
+            ctx.globalCompositeOperation = 'source-over';
+            const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, pulseSize);
+            coreGrad.addColorStop(0, '#ffffff');
+            coreGrad.addColorStop(0.3, '#ff6666');
+            coreGrad.addColorStop(0.7, '#ff0000');
+            coreGrad.addColorStop(1, '#880000');
+            ctx.fillStyle = coreGrad;
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(0, 0, pulseSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner spark
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(-pulseSize * 0.3, -pulseSize * 0.3, pulseSize * 0.25, 0, Math.PI * 2);
+            ctx.fill();
         } else {
             const length = p.size * 5;
             const width = p.size * 1.2;

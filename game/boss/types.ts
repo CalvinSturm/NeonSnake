@@ -13,14 +13,15 @@ export interface HitboxDef {
   color: string;
 }
 
-export type BossIntent = 
+export type BossIntent =
   | { type: 'REQUEST_STATE_TRANSITION'; next: BossStateId }
   | { type: 'SPAWN_HITBOX'; hitboxDef: HitboxDef }
   | { type: 'DESPAWN_HITBOX'; tag: string }
   | { type: 'LOCK_CAMERA' }
   | { type: 'UNLOCK_CAMERA' }
   | { type: 'SPAWN_MINIONS'; enemyType: EnemyType; count: number; offset?: {x: number, y: number} }
-  | { type: 'APPLY_EFFECT'; effect: 'SLOW' | 'MAGNET'; duration: number };
+  | { type: 'APPLY_EFFECT'; effect: 'SLOW' | 'MAGNET'; duration: number }
+  | { type: 'SPAWN_PROJECTILE'; angle: number; speed: number; damage: number; count?: number; spread?: number };
 
 export interface BossStateDef {
   id: BossStateId;
